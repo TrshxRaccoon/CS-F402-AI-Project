@@ -381,11 +381,10 @@ def export_interactive_dashboard(df, embeddings_2d, output_path):
     fig.write_html(output_path)
     print(f"Saved interactive HTML dashboard: {output_path}")
 
-
-def run_visualization_pipeline(data_path="data/mock_genomic_data.csv",
-                               output_dir="figures",
-                               results_dir="results",
-                               k=6):
+def run_sequence_space_pipeline(data_path="data/mock_genomic_data.csv",
+                                output_dir="figures",
+                                results_dir="results",
+                                k=6):
     """Executes the complete Task 2 visualization & dimensionality reduction pipeline."""
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)

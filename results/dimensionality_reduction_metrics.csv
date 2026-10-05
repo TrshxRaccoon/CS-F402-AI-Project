@@ -1,0 +1,7 @@
+Method,Dimensions,Silhouette Score,Davies-Bouldin Index,Calinski-Harabasz Index
+PCA-2D,2,0.0503,1.9113,7.5722
+PCA-3D,3,0.0709,2.4145,5.0043
+t-SNE-2D,2,0.1901,2.074,18.2419
+t-SNE-3D,3,0.004,7.3701,1.424
+UMAP-2D,2,0.1155,3.0204,9.299
+UMAP-3D,3,0.1554,2.0988,19.1957
