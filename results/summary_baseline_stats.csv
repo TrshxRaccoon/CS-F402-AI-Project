@@ -1,0 +1,11 @@
+Metric,Value
+Total Sequences,100.0
+Disease Count,61.0
+Healthy Count,39.0
+Mean Length (bp),357.47
+Median Length (bp),353.5
+Min Length (bp),200.0
+Max Length (bp),500.0
+Mean GC Content (%),53.025624238613446
+Disease Mean GC (%),56.567999635538996
+Healthy Mean GC (%),47.48498579726835

@@ -1,0 +1,4 @@
+k,Theoretical Vocab (4^k),Observed Vocab,Vocabulary Coverage (%),Document-Term Sparsity (%)
+3,64,64,100.0,1.0
+4,256,256,100.0,27.27
+6,4096,4093,99.93,91.79
