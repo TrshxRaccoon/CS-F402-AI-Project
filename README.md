@@ -23,14 +23,23 @@ Team Members:
 │   ├── 2_top_6mer_frequencies.png
 │   ├── 3_3mer_differential_enrichment.png
 │   ├── 3_6mer_differential_enrichment.png
-│   └── 4_combinatorial_explosion_and_sparsity.png
-├── results/               # Statistical summary tables (CSV)
+│   ├── 4_combinatorial_explosion_and_sparsity.png
+│   ├── 5_pca_sequence_space_2d_and_3d.png
+│   ├── 6_tsne_sequence_space_2d_and_3d.png
+│   ├── 7_umap_sequence_space_2d_and_3d.png
+│   ├── 8_dimensionality_reduction_comparison_dashboard.png
+│   ├── 9_kmer_resolution_clustering_comparison.png
+│   └── interactive_sequence_space_dashboard.html
+├── results/               # Statistical summary tables and evaluation metrics (CSV)
+│   ├── dimensionality_reduction_metrics.csv
+│   ├── pca_top_kmer_loadings.csv
 │   ├── summary_baseline_stats.csv
 │   ├── summary_sparsity_evaluation.csv
 │   ├── top_disease_enriched_3mers.csv
 │   └── top_disease_enriched_6mers.csv
 ├── src/                   # Source code
 │   ├── generate_mock_data.py
+│   ├── sequence_space_visualization.py
 │   └── sequence_statistics.py
 ├── requirements.txt       # Environment dependencies
 └── README.md
@@ -51,14 +60,19 @@ Team Members:
    pip install -r requirements.txt
    ```
 
-3. **Run Sequence Statistics (Tasks 1 & 2):**
+3. **Run Sequence Statistics (Tasks 1 & 2 - Arya):**
    ```bash
    python src/sequence_statistics.py --data data/mock_genomic_data.csv
    ```
 
+4. **Run Sequence Space Visualization (Task 2 - Vinayak):**
+   ```bash
+   python src/sequence_space_visualization.py --data data/mock_genomic_data.csv
+   ```
+
 ---
 
-## Team Integration Guide
+## Team Integration & Deliverables
 
 ### For Omkar (Data Pipeline)
 * Place the real curated biological dataset inside `data/` (e.g. `data/real_genomic_data.csv`).
@@ -66,14 +80,18 @@ Team Members:
 * When uploaded, simply re-run:
   ```bash
   python src/sequence_statistics.py --data data/real_genomic_data.csv
+  python src/sequence_space_visualization.py --data data/real_genomic_data.csv
   ```
 
-### For Vinayak (Visualization)
-* The figures directory (`figures/`) contains high-resolution plots for:
-  * Length & GC distributions
-  * Most frequent $k$-mers ("stop words")
-  * Disease vs Healthy differential enrichment ($\log_2 \text{FC}$)
-  * Sparsity vs Vocabulary explosion curves
+### For Vinayak (Visualization - Task 2 Deliverables)
+* **Dimensionality Reduction Methods**: Implemented 2D and 3D PCA, t-SNE, and UMAP on normalized $k$-mer frequency representations.
+* **Unsupervised Class Clustering**: Evaluated natural separation between disease and healthy classes without model supervision:
+  * t-SNE (2D) achieved a silhouette score of `0.1901` and Calinski-Harabasz index of `18.24`.
+  * UMAP (3D) achieved a silhouette score of `0.1554` and Davies-Bouldin index of `2.0988`.
+  * PCA (2D) separated global variance with `0.0503` silhouette score and identified top driving motif loadings.
+* **Motif Driver Identification**: Top principal component loadings (`results/pca_top_kmer_loadings.csv`) revealed high-magnitude discriminative motifs such as `gcgcgc` and `cgcgcg` on PC1 and PC2.
+* **Token Resolution Analysis**: Multi-panel resolution comparison (`figures/9_kmer_resolution_clustering_comparison.png`) demonstrated how transitioning from coarse 3-mers (64 tokens) to 6-mers (4,096 tokens) enables fine-grained cluster separation.
+* **Interactive Presentation Dashboard**: Generated an interactive HTML dashboard (`figures/interactive_sequence_space_dashboard.html`) allowing pan, zoom, and metadata inspection of individual sequences.
 
 ### For Parth (BoW & TF-IDF) & Sahil (Word2Vec)
 * Refer to `results/summary_sparsity_evaluation.csv`:
