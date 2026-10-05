@@ -15,6 +15,9 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import umap
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
 
 def load_dataset(file_path):
@@ -84,3 +87,63 @@ def compute_pca(X, feature_names=None, n_components=3, random_state=42):
         loadings_df = pd.DataFrame(loadings)
 
     return coords, explained_var, loadings_df
+
+
+def compute_tsne(X, n_components=2, perplexity=25, metric="cosine", random_state=42):
+    """
+    Computes 2D or 3D t-SNE projections preserving local neighborhood topology.
+    Uses cosine distance by default to align with high-dimensional k-mer word distributions.
+    """
+    n_samples = X.shape[0]
+    safe_perplexity = min(perplexity, max(5, (n_samples - 1) // 3))
+    
+    tsne_model = TSNE(
+        n_components=n_components,
+        perplexity=safe_perplexity,
+        metric=metric,
+        init="random" if metric != "euclidean" else "pca",
+        learning_rate="auto",
+        random_state=random_state
+    )
+    coords = tsne_model.fit_transform(X)
+    return coords
+
+
+def compute_umap(X, n_components=2, n_neighbors=15, min_dist=0.1, metric="cosine", random_state=42):
+    """
+    Computes 2D or 3D UMAP projections capturing both local and global manifold structure.
+    """
+    n_samples = X.shape[0]
+    safe_neighbors = min(n_neighbors, n_samples - 1)
+
+    reducer = umap.UMAP(
+        n_components=n_components,
+        n_neighbors=safe_neighbors,
+        min_dist=min_dist,
+        metric=metric,
+        random_state=random_state
+    )
+    coords = reducer.fit_transform(X)
+    return coords
+
+
+def evaluate_clustering_quality(embeddings_dict, labels):
+    """
+    Evaluates cluster compactness and separation across dimensionality reduction methods:
+    - Silhouette Score (higher is better, [-1, 1])
+    - Davies-Bouldin Index (lower is better, [0, inf))
+    - Calinski-Harabasz Index (higher is better)
+    """
+    metrics = []
+    for name, coords in embeddings_dict.items():
+        sil = silhouette_score(coords, labels)
+        db = davies_bouldin_score(coords, labels)
+        ch = calinski_harabasz_score(coords, labels)
+        metrics.append({
+            "Method": name,
+            "Dimensions": coords.shape[1],
+            "Silhouette Score": round(float(sil), 4),
+            "Davies-Bouldin Index": round(float(db), 4),
+            "Calinski-Harabasz Index": round(float(ch), 4)
+        })
+    return pd.DataFrame(metrics)
