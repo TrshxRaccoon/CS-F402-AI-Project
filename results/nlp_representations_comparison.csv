@@ -1,0 +1,5 @@
+Representation,Dimensionality,Sparsity (%),Mean Intra-Class Sim,Mean Inter-Class Sim,Separation Ratio (Intra/Inter)
+Classical TF-IDF (Parth),256,27.27,0.578,0.5389,1.0726
+Word2Vec Mean-Pooled (Sahil),64,0.0,0.9830999970436096,0.9704999923706055,1.0128999948501587
+Word2Vec TF-IDF Weighted (Sahil),64,0.0,0.956,0.9276,1.0306
+Doc2Vec Direct (Sahil),64,0.0,0.8593999743461609,0.8537999987602234,1.006600022315979
