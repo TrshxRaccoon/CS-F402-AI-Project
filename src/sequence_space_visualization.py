@@ -325,9 +325,10 @@ def plot_kmer_resolution_comparison(df, output_path):
     print(f"Saved k-mer comparison figure: {output_path}")
 
 
-def export_interactive_dashboard(df, embeddings_2d, output_path):
+def export_interactive_dashboard(df, embeddings_2d, output_path, w2v_embeddings_2d=None):
     """
     Exports an interactive Plotly HTML dashboard enabling pan, zoom, and sequence metadata inspection.
+    Includes both discrete k-mer and continuous Word2Vec embedding sequence spaces when available.
     """
     labels = df["label"].values
     hover_texts = [
@@ -338,19 +339,31 @@ def export_interactive_dashboard(df, embeddings_2d, output_path):
         for _, row in df.iterrows()
     ]
 
+    has_w2v = (w2v_embeddings_2d is not None and len(w2v_embeddings_2d) > 0)
+    n_rows = 2 if has_w2v else 1
+    
+    subplot_titles = [
+        "k-mer Space (k=6): PCA", "k-mer Space (k=6): t-SNE", "k-mer Space (k=6): UMAP"
+    ]
+    if has_w2v:
+        subplot_titles.extend([
+            "Word2Vec Space: PCA", "Word2Vec Space: t-SNE", "Word2Vec Space: UMAP"
+        ])
+
     fig = make_subplots(
-        rows=1, cols=3,
-        subplot_titles=("PCA (Linear)", "t-SNE (Local Manifold)", "UMAP (Topological)"),
-        horizontal_spacing=0.08
+        rows=n_rows, cols=3,
+        subplot_titles=tuple(subplot_titles),
+        horizontal_spacing=0.08,
+        vertical_spacing=0.14 if has_w2v else 0.08
     )
 
-    methods = [
+    methods_kmer = [
         ("PCA-2D", "PC1", "PC2", 1),
         ("t-SNE-2D", "t-SNE 1", "t-SNE 2", 2),
         ("UMAP-2D", "UMAP 1", "UMAP 2", 3)
     ]
 
-    for method_key, xlabel, ylabel, col_idx in methods:
+    for method_key, xlabel, ylabel, col_idx in methods_kmer:
         coords = embeddings_2d[method_key]
         for label_val, color in COLOR_PALETTE.items():
             mask = (labels == label_val)
@@ -360,6 +373,7 @@ def export_interactive_dashboard(df, embeddings_2d, output_path):
                     y=coords[mask, 1],
                     mode="markers",
                     name=label_val.capitalize(),
+                    legendgroup=label_val,
                     showlegend=(col_idx == 1),
                     text=[hover_texts[i] for i in np.where(mask)[0]],
                     hoverinfo="text",
@@ -370,12 +384,39 @@ def export_interactive_dashboard(df, embeddings_2d, output_path):
         fig.update_xaxes(title_text=xlabel, row=1, col=col_idx)
         fig.update_yaxes(title_text=ylabel, row=1, col=col_idx)
 
+    if has_w2v:
+        methods_w2v = [
+            ("Word2Vec-PCA-2D", "PC1", "PC2", 1),
+            ("Word2Vec-t-SNE-2D", "t-SNE 1", "t-SNE 2", 2),
+            ("Word2Vec-UMAP-2D", "UMAP 1", "UMAP 2", 3)
+        ]
+        for method_key, xlabel, ylabel, col_idx in methods_w2v:
+            coords = w2v_embeddings_2d[method_key]
+            for label_val, color in COLOR_PALETTE.items():
+                mask = (labels == label_val)
+                fig.add_trace(
+                    go.Scatter(
+                        x=coords[mask, 0],
+                        y=coords[mask, 1],
+                        mode="markers",
+                        name=label_val.capitalize(),
+                        legendgroup=label_val,
+                        showlegend=False,
+                        text=[hover_texts[i] for i in np.where(mask)[0]],
+                        hoverinfo="text",
+                        marker=dict(size=8, color=color, line=dict(width=1, color="white"))
+                    ),
+                    row=2, col=col_idx
+                )
+            fig.update_xaxes(title_text=xlabel, row=2, col=col_idx)
+            fig.update_yaxes(title_text=ylabel, row=2, col=col_idx)
+
     fig.update_layout(
-        title_text="DNA/RNA Sequence Space Visualization Dashboard (Task 2)",
+        title_text="DNA/RNA Sequence Space Visualization Dashboard: k-mer vs Word2Vec",
         template="plotly_white",
-        height=550,
+        height=900 if has_w2v else 550,
         width=1350,
-        legend=dict(orientation="h", yanchor="bottom", y=1.08, xanchor="center", x=0.5)
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
     )
 
     fig.write_html(output_path)
@@ -427,6 +468,31 @@ def run_sequence_space_pipeline(data_path="data/mock_genomic_data.csv",
         "UMAP-2D": umap_2d,
         "UMAP-3D": umap_3d
     }
+
+    # Ingest team continuous sequence embeddings if available
+    w2v_path = os.path.join(results_dir, "sequence_embeddings_word2vec_tfidf.csv")
+    w2v_embeddings_2d = None
+    if os.path.exists(w2v_path):
+        print(f"Loading team Word2Vec embeddings from: {w2v_path}")
+        w2v_df = pd.read_csv(w2v_path)
+        dim_cols = [c for c in w2v_df.columns if c.startswith("dim_")]
+        if len(dim_cols) > 0:
+            X_w2v = w2v_df[dim_cols].values
+            w2v_pca_3d, _, _ = compute_pca(X_w2v, n_components=3)
+            w2v_pca_2d = w2v_pca_3d[:, :2]
+            w2v_tsne_2d = compute_tsne(X_w2v, n_components=2, perplexity=25, metric="cosine")
+            w2v_umap_2d = compute_umap(X_w2v, n_components=2, n_neighbors=15, min_dist=0.1, metric="cosine")
+            w2v_embeddings_2d = {
+                "Word2Vec-PCA-2D": w2v_pca_2d,
+                "Word2Vec-t-SNE-2D": w2v_tsne_2d,
+                "Word2Vec-UMAP-2D": w2v_umap_2d
+            }
+            all_embeddings.update({
+                "Word2Vec-PCA-2D": w2v_pca_2d,
+                "Word2Vec-PCA-3D": w2v_pca_3d,
+                "Word2Vec-t-SNE-2D": w2v_tsne_2d,
+                "Word2Vec-UMAP-2D": w2v_umap_2d
+            })
 
     # 5. Quantitative Clustering Evaluation
     metrics_df = evaluate_clustering_quality(all_embeddings, labels)
@@ -487,7 +553,8 @@ def run_sequence_space_pipeline(data_path="data/mock_genomic_data.csv",
 
     export_interactive_dashboard(
         df, embeddings_2d,
-        output_path=os.path.join(output_dir, "interactive_sequence_space_dashboard.html")
+        output_path=os.path.join(output_dir, "interactive_sequence_space_dashboard.html"),
+        w2v_embeddings_2d=w2v_embeddings_2d
     )
 
     print("\n" + "="*60)
