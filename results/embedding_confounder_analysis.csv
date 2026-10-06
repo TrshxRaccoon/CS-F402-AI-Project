@@ -1,0 +1,5 @@
+Component,Confounder,Pearson r,p-value
+PC1,GC Content (%),0.996,1.88e-104
+PC1,Sequence Length,0.0399,6.94e-01
+PC2,GC Content (%),-0.0339,7.38e-01
+PC2,Sequence Length,0.0407,6.88e-01

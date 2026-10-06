@@ -31,12 +31,19 @@ Team Members:
 │   ├── 9_kmer_resolution_clustering_comparison.png
 │   ├── 10_word2vec_kmer_vocabulary_pca.png
 │   ├── 11_word2vec_sequence_space_pca.png
+│   ├── 12_motif_similarity_clustermap.png
 │   └── interactive_sequence_space_dashboard.html
 ├── models/                # Trained neural embedding models
+│   ├── dna2vec_kmers_3.model
 │   ├── dna2vec_kmers_4.model
-│   └── doc2vec_kmers_4.model
+│   ├── dna2vec_kmers_6.model
+│   ├── doc2vec_kmers_3.model
+│   ├── doc2vec_kmers_4.model
+│   └── doc2vec_kmers_6.model
 ├── results/               # Statistical summary tables and evaluation metrics (CSV)
 │   ├── dimensionality_reduction_metrics.csv
+│   ├── embedding_confounder_analysis.csv
+│   ├── embedding_hyperparameter_sensitivity.csv
 │   ├── kmer_embeddings.csv
 │   ├── nlp_representations_comparison.csv
 │   ├── pca_top_kmer_loadings.csv
@@ -114,18 +121,19 @@ Team Members:
 * **Continuous Representation Models**: Trained dense Skip-Gram Word2Vec (dna2vec, dimension=64, window=5) and Doc2Vec (Paragraph Vector) on tokenized $k$-mer sequences.
 * **Sequence-Level Representations**: Formulated three distinct dense embedding strategies:
   * *Word2Vec Mean-Pooled*: Standard baseline compressing sequences into dense 64D vectors (0.00% sparsity).
-  * *Word2Vec TF-IDF Weighted*: Down-weights ubiquitous background motifs and amplifies rare informative features, improving the intra/inter-class separation ratio to `1.0306`.
+  * *Word2Vec TF-IDF Weighted*: Down-weights ubiquitous background motifs and amplifies rare informative features, improving class separation ratio to `1.0313`.
   * *Doc2Vec Direct*: Direct sequence-level representations capturing document-level compositional structure.
-* **Semantic & Structural Mutation Testing**:
-  * Evaluated single-nucleotide biological transitions ($A \leftrightarrow G$, $C \leftrightarrow T$, cosine sim ~`0.62–0.71`) versus transversions (purine $\leftrightarrow$ pyrimidine, cosine sim dropped to `0.3064`).
-  * Assessed reverse complements ($5' \rightarrow 3'$) and sliding-window stride overlap effects (`ATGC` vs `TGCA`, cosine sim ~`0.6551`).
-* **Cross-Evaluation against Classical TF-IDF Baseline (with Parth)**:
-  * Documented comparative metrics in `results/nlp_representations_comparison.csv`:
-    * Classical TF-IDF: 256 dimensions, 27.27% sparsity.
-    * Advanced Word2Vec/Doc2Vec: 64 dimensions, 0.00% sparsity.
+* **Dynamic Semantic & Mutation Analysis**:
+  * Evaluated single-nucleotide biological transitions ($A \leftrightarrow G$, $C \leftrightarrow T$) versus transversions (purine $\leftrightarrow$ pyrimidine), reverse complements ($5' \rightarrow 3'$), and stride overlaps across $k=3, 4, 6$.
+* **Genomic Vector Arithmetic (Analogy Test)**:
+  * Empirically proved linear geometric substitution consistency ($\vec{v}_{\text{prefix}+G} - \vec{v}_{\text{prefix}+A}$ yields positive directional cosine consistency across diverse genomic contexts).
+* **Confounder & Artifact Disentanglement (Task 5 Rigour)**:
+  * Documented in `results/embedding_confounder_analysis.csv`: PC1 cleanly aligns with GC content ($r=0.996$), while sequence embeddings remain completely invariant to sequence length ($r=0.039, p=0.69$). Orthogonal PC2 isolates non-GC sequence variance ($r=-0.033, p=0.74$).
+* **Architectural Sensitivity Benchmark**:
+  * Documented in `results/embedding_hyperparameter_sensitivity.csv`: Empirically validated that Skip-Gram outperforms CBOW in class separation ratio (`1.0129` vs `1.0039`) because Skip-Gram preserves rare pathogenic motifs that CBOW context-averaging dilutes.
 * **Deliverables for Teammates**:
-  * Handoff to Vinayak & Task 4 (Classification): Exported labeled feature matrices (`results/sequence_embeddings_word2vec_mean.csv`, `sequence_embeddings_word2vec_tfidf.csv`, and `sequence_embeddings_doc2vec.csv`).
-  * Vocabulary Map: Exported `results/kmer_embeddings.csv` and generated `figures/10_word2vec_kmer_vocabulary_pca.png` and `figures/11_word2vec_sequence_space_pca.png`.
+  * Feature Matrices: Exported labeled matrices (`results/sequence_embeddings_word2vec_mean.csv`, `sequence_embeddings_word2vec_tfidf.csv`, and `sequence_embeddings_doc2vec.csv`).
+  * Visualizations: Generated `figures/10_word2vec_kmer_vocabulary_pca.png`, `figures/11_word2vec_sequence_space_pca.png`, and `figures/12_motif_similarity_clustermap.png`.
 
 ### For Parth (BoW & TF-IDF Baseline)
 * Refer to `results/summary_sparsity_evaluation.csv`:

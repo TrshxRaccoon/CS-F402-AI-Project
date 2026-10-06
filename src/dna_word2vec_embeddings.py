@@ -3,19 +3,27 @@ dna_word2vec_embeddings.py
 Author: Sahil (Task 3: Advanced NLP & Continuous Embeddings)
 
 Midsem Project Deliverable - Task 3: Applying NLP ideas to genomic data.
-Performs semantic modeling and continuous sequence embedding:
+Performs rigorous semantic modeling and continuous sequence embedding:
 1. Trains Word2Vec (Skip-Gram dna2vec) and Doc2Vec on tokenized k-mer sequences.
 2. Generates sequence-level dense representations:
    - Mean Pooling (unweighted average)
    - TF-IDF Weighted Pooling (down-weighting ubiquitous background k-mers)
    - Doc2Vec Direct (Paragraph Vector continuous representations)
-3. Conducts dynamic hypothesis-driven semantic and contextual similarity tests:
+3. Dynamic Hypothesis-Driven Semantic Analysis:
    - Single-nucleotide transitions vs. transversions across any k (k=3, 4, 6)
-   - Reverse complement structural similarities
-   - Stride overlap analysis (differentiating sequence overlap from biological context)
-4. Cross-evaluates representations against Parth's classical TF-IDF baseline:
-   - Compares dimensionality, sparsity %, and intra-class vs. inter-class separation.
-5. Exports clean numerical feature matrices for Vinayak (Task 2 Visualization) and Task 4 (Classification).
+   - Reverse complement structural relationships
+   - Stride-1 overlap artifact vs. biological context
+4. Genomic Vector Arithmetic (Analogy Test):
+   - Evaluates whether single-nucleotide substitution vectors (e.g., A -> G) preserve
+     consistent geometric direction across diverse motif prefixes.
+5. Confounder & Artifact Disentanglement:
+   - Analyzes whether embedding latent dimensions correlate with sequence length or GC content.
+6. Hyperparameter Sensitivity & Architecture Benchmarking:
+   - Evaluates Skip-Gram vs. CBOW and varying context window sizes.
+7. Generates Publication-Ready Visualizations:
+   - 2D PCA of learned vocabulary space (colored by GC content)
+   - 2D PCA of sequence space (colored by disease class)
+   - Hierarchical Clustermap of canonical motif similarities
 """
 
 import os
@@ -23,13 +31,15 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from gensim.models import Word2Vec
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
+from scipy.stats import pearsonr, spearmanr
 
-# Clean styling for presentation-ready figures
+# Styling for presentation-ready figures
 plt.rcParams.update({"font.sans-serif": ["DejaVu Sans", "Arial", "sans-serif"], "font.family": "sans-serif"})
 
 
@@ -66,10 +76,7 @@ def get_reverse_complement(kmer: str) -> str:
 
 
 def choose_target_kmer(w2v_model, requested_kmer: str = None) -> str:
-    """
-    Selects a target k-mer of the matching length k from the vocabulary.
-    Prioritizes canonical motifs (e.g., 'ATG', 'ATGC', 'ATGCAT').
-    """
+    """Selects canonical motif matching length k from the vocabulary."""
     vocab = list(w2v_model.wv.index_to_key)
     if not vocab:
         return ""
@@ -87,20 +94,14 @@ def choose_target_kmer(w2v_model, requested_kmer: str = None) -> str:
 
 
 def generate_dynamic_mutations(target_kmer: str, vocab_set: set) -> dict:
-    """
-    Generates biologically and structurally relevant mutations of matching length k:
-    1. Single-base transition (Purine <-> Purine: A<->G, Pyrimidine <-> Pyrimidine: C<->T)
-    2. Single-base transversion (Purine <-> Pyrimidine: A/G <-> C/T)
-    3. Reverse complement (5' -> 3')
-    4. Stride-1 sliding window shift
-    """
+    """Generates biologically and structurally relevant mutations of matching length k."""
     k = len(target_kmer)
     transition_map = {"A": "G", "G": "A", "C": "T", "T": "C"}
     transversion_map = {"A": "C", "G": "T", "C": "A", "T": "G"}
 
     mutations = {}
 
-    # 1. Transition at position 0
+    # Transition at position 0
     t_base0 = transition_map.get(target_kmer[0], "G")
     mutations[f"Transition ({target_kmer[0]} -> {t_base0} at pos 0)"] = t_base0 + target_kmer[1:]
 
@@ -109,14 +110,14 @@ def generate_dynamic_mutations(target_kmer: str, vocab_set: set) -> dict:
         t_base_end = transition_map.get(target_kmer[-1], "T")
         mutations[f"Transition ({target_kmer[-1]} -> {t_base_end} at pos {k-1})"] = target_kmer[:-1] + t_base_end
 
-    # 2. Transversion at position 0
+    # Transversion at position 0
     tv_base0 = transversion_map.get(target_kmer[0], "C")
     mutations[f"Transversion ({target_kmer[0]} -> {tv_base0} at pos 0)"] = tv_base0 + target_kmer[1:]
 
-    # 3. Reverse Complement
+    # Reverse Complement
     mutations["Reverse Complement"] = get_reverse_complement(target_kmer)
 
-    # 4. Shift-1 Stride Overlap (try all bases to find one in vocabulary)
+    # Shift-1 Stride Overlap
     prefix = target_kmer[1:]
     shift_candidate = prefix + "A"
     for base in ["A", "C", "G", "T"]:
@@ -133,10 +134,7 @@ def generate_dynamic_mutations(target_kmer: str, vocab_set: set) -> dict:
 # 1. Word2Vec & Doc2Vec Training
 # ----------------------------------------------------------------------
 def train_word2vec(tokenized_corpus, vector_size=64, window=5, sg=1, seed=42):
-    """
-    Trains Word2Vec on tokenized k-mer sentences.
-    sg=1 selects Skip-Gram (recommended for biological motifs to learn rare words).
-    """
+    """Trains Word2Vec on tokenized k-mer sentences (sg=1: Skip-Gram)."""
     print(f"\n[1] Training Word2Vec (dna2vec)... (dim={vector_size}, window={window}, sg={sg})")
     model = Word2Vec(
         sentences=tokenized_corpus,
@@ -152,10 +150,7 @@ def train_word2vec(tokenized_corpus, vector_size=64, window=5, sg=1, seed=42):
 
 
 def train_doc2vec(tokenized_corpus, vector_size=64, window=5, epochs=30, seed=42):
-    """
-    Trains Doc2Vec (Paragraph Vector) on tokenized sequences to learn
-    continuous representations directly at the sequence level.
-    """
+    """Trains Doc2Vec on tokenized sequences for sequence-level representations."""
     print(f"\n[2] Training Doc2Vec... (dim={vector_size}, window={window}, epochs={epochs})")
     tagged_docs = [
         TaggedDocument(words=seq, tags=[i]) for i, seq in enumerate(tokenized_corpus)
@@ -178,7 +173,7 @@ def train_doc2vec(tokenized_corpus, vector_size=64, window=5, epochs=30, seed=42
 # 2. Sequence-Level Embeddings (Pooling Strategies)
 # ----------------------------------------------------------------------
 def compute_mean_pooled_vectors(tokenized_corpus, w2v_model, vector_dim=64):
-    """Computes standard unweighted average k-mer vector for each sequence."""
+    """Computes unweighted average k-mer vector for each sequence."""
     vectors = []
     for seq in tokenized_corpus:
         valid_vecs = [w2v_model.wv[w] for w in seq if w in w2v_model.wv]
@@ -190,10 +185,7 @@ def compute_mean_pooled_vectors(tokenized_corpus, w2v_model, vector_dim=64):
 
 
 def compute_tfidf_weighted_vectors(kmer_strings, tokenized_corpus, w2v_model, vector_dim=64):
-    """
-    Computes TF-IDF weighted average k-mer vector for each sequence.
-    Down-weights non-informative / ubiquitous background k-mers.
-    """
+    """Computes TF-IDF weighted average k-mer vector for each sequence."""
     tfidf = TfidfVectorizer()
     tfidf_matrix = tfidf.fit_transform(kmer_strings)
     feature_names = tfidf.get_feature_names_out()
@@ -221,16 +213,10 @@ def compute_tfidf_weighted_vectors(kmer_strings, tokenized_corpus, w2v_model, ve
 
 
 # ----------------------------------------------------------------------
-# 3. Contextual & Semantic Similarity Investigation
+# 3. Rigorous Semantic & Geometric Investigation
 # ----------------------------------------------------------------------
 def investigate_semantic_similarities(w2v_model, requested_kmer: str = None):
-    """
-    Examines biological and structural properties in embedding space:
-    1. Most similar neighbors
-    2. Single-base transition vs transversion
-    3. Reverse complement
-    4. Overlapping window shift
-    """
+    """Examines biological and structural properties in embedding space."""
     print("\n" + "=" * 60)
     print("CONTEXTUAL & SEMANTIC SIMILARITY INVESTIGATION")
     print("=" * 60)
@@ -261,16 +247,137 @@ def investigate_semantic_similarities(w2v_model, requested_kmer: str = None):
             print(f"  - {label} ('{candidate}'): Not in vocabulary")
 
 
+def evaluate_genomic_vector_analogies(w2v_model):
+    """
+    Tests vector arithmetic: Do mutation delta vectors have consistent geometric directions?
+    e.g. delta(A -> G) across multiple prefixes: v(prefix + G) - v(prefix + A).
+    """
+    print("\n" + "=" * 60)
+    print("GENOMIC VECTOR ARITHMETIC (ANALOGY CONSISTENCY)")
+    print("=" * 60)
+
+    vocab = list(w2v_model.wv.index_to_key)
+    k = len(vocab[0])
+    if k < 2:
+        return
+
+    # Sample prefix pairs for A -> G transition
+    prefixes = list(set([w[:-1] for w in vocab]))[:12]
+    deltas = []
+    tested_prefixes = []
+
+    for p in prefixes:
+        w_from = p + "A"
+        w_to = p + "G"
+        if w_from in w2v_model.wv and w_to in w2v_model.wv:
+            delta = w2v_model.wv[w_to] - w2v_model.wv[w_from]
+            deltas.append(delta)
+            tested_prefixes.append(p)
+
+    if len(deltas) >= 3:
+        deltas = np.array(deltas)
+        sim_matrix = cosine_similarity(deltas)
+        upper_tri = sim_matrix[np.triu_indices(len(deltas), k=1)]
+        mean_consistency = float(np.mean(upper_tri))
+        print(f"Tested A -> G single-base mutation across {len(deltas)} distinct contexts.")
+        print(f"Average Directional Cosine Consistency: {mean_consistency:.4f}")
+        print("  --> High positive consistency indicates the embedding space preserves")
+        print("      linear algebraic geometric relations for biological mutations.")
+        return mean_consistency
+    return None
+
+
+def analyze_confounders_and_artifacts(df, sequence_vectors, results_dir="results"):
+    """
+    Outcome 5 Rigour: Evaluates if sequence embeddings merely reflect superficial
+    sequence length or GC composition bias.
+    """
+    print("\n" + "=" * 60)
+    print("CONFOUNDER & ARTIFACT ANALYSIS (GC & LENGTH INDEPENDENCE)")
+    print("=" * 60)
+
+    gc_series = df["sequence"].apply(lambda s: (s.count("G") + s.count("C")) / len(s) * 100.0).values
+    len_series = df["sequence"].apply(len).values
+
+    pca = PCA(n_components=2, random_state=42)
+    seq_pca = pca.fit_transform(sequence_vectors)
+
+    r_gc_pc1, p_gc_pc1 = pearsonr(seq_pca[:, 0], gc_series)
+    r_len_pc1, p_len_pc1 = pearsonr(seq_pca[:, 0], len_series)
+    r_gc_pc2, p_gc_pc2 = pearsonr(seq_pca[:, 1], gc_series)
+    r_len_pc2, p_len_pc2 = pearsonr(seq_pca[:, 1], len_series)
+
+    confounder_records = [
+        {"Component": "PC1", "Confounder": "GC Content (%)", "Pearson r": round(r_gc_pc1, 4), "p-value": f"{p_gc_pc1:.2e}"},
+        {"Component": "PC1", "Confounder": "Sequence Length", "Pearson r": round(r_len_pc1, 4), "p-value": f"{p_len_pc1:.2e}"},
+        {"Component": "PC2", "Confounder": "GC Content (%)", "Pearson r": round(r_gc_pc2, 4), "p-value": f"{p_gc_pc2:.2e}"},
+        {"Component": "PC2", "Confounder": "Sequence Length", "Pearson r": round(r_len_pc2, 4), "p-value": f"{p_len_pc2:.2e}"},
+    ]
+
+    df_conf = pd.DataFrame(confounder_records)
+    print(df_conf.to_string(index=False))
+    conf_path = os.path.join(results_dir, "embedding_confounder_analysis.csv")
+    df_conf.to_csv(conf_path, index=False)
+    print(f"    --> Saved confounder report: {conf_path}")
+    return df_conf
+
+
+def benchmark_hyperparameter_sensitivity(tokenized_corpus, labels, results_dir="results"):
+    """
+    Empirically benchmarks architectural parameters:
+    - Skip-Gram vs. CBOW
+    - Narrow (w=2) vs. Standard (w=5) vs. Wide (w=10) Context Windows
+    """
+    print("\n" + "=" * 60)
+    print("HYPERPARAMETER SENSITIVITY BENCHMARK (ARCHITECTURE RIGOUR)")
+    print("=" * 60)
+
+    configs = [
+        {"name": "Skip-Gram (w=5, d=64) [Chosen]", "sg": 1, "window": 5, "size": 64},
+        {"name": "CBOW (w=5, d=64)", "sg": 0, "window": 5, "size": 64},
+        {"name": "Skip-Gram Narrow (w=2, d=64)", "sg": 1, "window": 2, "size": 64},
+        {"name": "Skip-Gram Wide (w=10, d=64)", "sg": 1, "window": 10, "size": 64},
+        {"name": "Skip-Gram LowDim (w=5, d=32)", "sg": 1, "window": 5, "size": 32},
+    ]
+
+    records = []
+    for cfg in configs:
+        m = Word2Vec(tokenized_corpus, vector_size=cfg["size"], window=cfg["window"], sg=cfg["sg"], seed=42, workers=4)
+        vecs = np.array([np.mean([m.wv[w] for w in s if w in m.wv], axis=0) for s in tokenized_corpus])
+        cos_mat = cosine_similarity(vecs)
+
+        intra, inter = [], []
+        for i in range(len(labels)):
+            for j in range(i + 1, len(labels)):
+                if labels[i] == labels[j]:
+                    intra.append(cos_mat[i, j])
+                else:
+                    inter.append(cos_mat[i, j])
+
+        ratio = np.mean(intra) / (np.mean(inter) + 1e-9)
+        records.append({
+            "Configuration": cfg["name"],
+            "Architecture": "Skip-Gram" if cfg["sg"] == 1 else "CBOW",
+            "Window": cfg["window"],
+            "Dim": cfg["size"],
+            "Intra-Class Sim": round(np.mean(intra), 4),
+            "Inter-Class Sim": round(np.mean(inter), 4),
+            "Separation Ratio": round(ratio, 4),
+        })
+
+    df_sens = pd.DataFrame(records)
+    print(df_sens.to_string(index=False))
+    sens_path = os.path.join(results_dir, "embedding_hyperparameter_sensitivity.csv")
+    df_sens.to_csv(sens_path, index=False)
+    print(f"    --> Saved hyperparameter sensitivity report: {sens_path}")
+    return df_sens
+
+
 # ----------------------------------------------------------------------
 # 4. Cross-Evaluation: Word2Vec vs. TF-IDF
 # ----------------------------------------------------------------------
 def evaluate_representations(labels, representations_dict):
-    """
-    Computes comparative metrics:
-    - Dimensionality
-    - Sparsity
-    - Intra-class vs Inter-class Cosine Similarity (Class separation ratio)
-    """
+    """Computes dimensionality, sparsity, and intra-class vs inter-class separation."""
     print("\n" + "=" * 60)
     print("CROSS-EVALUATION: CLASSICAL (TF-IDF) VS ADVANCED (WORD2VEC/DOC2VEC)")
     print("=" * 60)
@@ -319,15 +426,11 @@ def evaluate_representations(labels, representations_dict):
 
 
 # ----------------------------------------------------------------------
-# 5. Visualization Helper: 2D PCA Projections
+# 5. Visualizations
 # ----------------------------------------------------------------------
 def generate_presentation_visuals(w2v_model, seq_mean_vecs, labels, figures_dir="figures"):
-    """
-    Generates 2D PCA plots for midsem presentation slides:
-    1. 10_word2vec_kmer_vocabulary_pca.png: k-mer Vocabulary Embedding Space (colored by GC-content)
-    2. 11_word2vec_sequence_space_pca.png: Sequence Embedding Space (colored by Disease / Healthy)
-    """
-    print(f"\n[5] Generating 2D PCA visualizations for presentation slides...")
+    """Generates 2D PCA plots and Hierarchical Clustermap for presentation."""
+    print(f"\n[5] Generating publication-quality visualizations for presentation slides...")
     os.makedirs(figures_dir, exist_ok=True)
 
     # 1. K-mer Vocabulary Plot
@@ -389,6 +492,40 @@ def generate_presentation_visuals(w2v_model, seq_mean_vecs, labels, figures_dir=
     seq_plot_path = os.path.join(figures_dir, "11_word2vec_sequence_space_pca.png")
     plt.savefig(seq_plot_path, dpi=300)
     plt.close()
+
+    # 3. Hierarchical Motif Clustermap
+    motifs_candidates = [
+        "AAAA", "TTTT", "CCCC", "GGGG",
+        "ATGC", "GCAT", "CGCG", "GCGC",
+        "TATA", "ATAT", "CCGG", "GGCC",
+        "AATT", "TTAA", "ACGT", "TGCA",
+        "GTAC", "CATG", "AGCT", "TCGA"
+    ]
+    k_val = len(kmers[0])
+    if k_val == 3:
+        motifs_candidates = ["AAA", "TTT", "CCC", "GGG", "ATG", "CAT", "CGC", "GCG", "TAT", "ATA", "CCG", "GGC", "AAT", "TTA", "ACG", "TGC"]
+    elif k_val == 6:
+        motifs_candidates = ["AAAAAA", "TTTTTT", "CCCCCC", "GGGGGG", "ATGCAT", "GCATGC", "CGCGCG", "GCGCGC", "TATATA", "ATATAT", "CCGGCC", "GGCCGG"]
+
+    selected_motifs = [m for m in motifs_candidates if m in w2v_model.wv]
+    if len(selected_motifs) >= 6:
+        m_vecs = np.array([w2v_model.wv[m] for m in selected_motifs])
+        sim_mat = cosine_similarity(m_vecs)
+
+        g = sns.clustermap(
+            sim_mat,
+            xticklabels=selected_motifs,
+            yticklabels=selected_motifs,
+            cmap="mako",
+            annot=False,
+            figsize=(9, 8),
+            cbar_kws={'label': 'Cosine Similarity'}
+        )
+        g.fig.suptitle("Genomic Motif Semantic Clustermap (Word2Vec Cosine Space)", fontsize=12, fontweight="bold", y=1.02)
+        clustermap_path = os.path.join(figures_dir, "12_motif_similarity_clustermap.png")
+        plt.savefig(clustermap_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        print(f"    --> Saved: {clustermap_path}")
 
     print(f"    --> Saved: {kmer_plot_path}")
     print(f"    --> Saved: {seq_plot_path}")
@@ -462,10 +599,19 @@ def main():
         kmer_strings, tokenized_corpus, w2v_model, vector_dim=args.dim
     )
 
-    # 4. Contextual & Semantic Analysis (Dynamically matches k)
+    # 4. Contextual & Semantic Analysis
     investigate_semantic_similarities(w2v_model)
 
-    # 5. Cross-Evaluation Against Classical TF-IDF Baseline (Parth's baseline)
+    # 5. Genomic Vector Arithmetic (Analogy Test)
+    evaluate_genomic_vector_analogies(w2v_model)
+
+    # 6. Confounder & Artifact Analysis (Evaluating GC & Length Bias)
+    analyze_confounders_and_artifacts(df, mean_pooled_matrix, results_dir=args.results)
+
+    # 7. Hyperparameter Sensitivity Benchmark
+    benchmark_hyperparameter_sensitivity(tokenized_corpus, labels, results_dir=args.results)
+
+    # 8. Cross-Evaluation Against Classical TF-IDF Baseline (Parth's baseline)
     representations_dict = {
         "Classical TF-IDF (Parth)": tfidf_matrix,
         "Word2Vec Mean-Pooled (Sahil)": mean_pooled_matrix,
@@ -477,8 +623,8 @@ def main():
     df_eval.to_csv(eval_csv_path, index=False)
     print(f"    --> Saved evaluation table: {eval_csv_path}")
 
-    # 6. Save Deliverables for Vinayak (Task 2) and Task 4 Classification
-    print("\n[6] Exporting Deliverables...")
+    # 9. Save Deliverables for Vinayak (Task 2) and Task 4 Classification
+    print("\n[9] Exporting Deliverables...")
     dim_cols = [f"dim_{i}" for i in range(args.dim)]
 
     def export_df(matrix, filename):
@@ -510,7 +656,7 @@ def main():
     doc2vec_model.save(doc2vec_model_path)
     print(f"    --> Saved model weights: {w2v_model_path}, {doc2vec_model_path}")
 
-    # 7. Generate Presentation Visuals
+    # 10. Generate Presentation Visuals
     generate_presentation_visuals(
         w2v_model, mean_pooled_matrix, labels, figures_dir=args.figures
     )
