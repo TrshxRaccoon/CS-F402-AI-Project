@@ -9,8 +9,8 @@ Performs semantic modeling and continuous sequence embedding:
    - Mean Pooling (unweighted average)
    - TF-IDF Weighted Pooling (down-weighting ubiquitous background k-mers)
    - Doc2Vec Direct (Paragraph Vector continuous representations)
-3. Conducts hypothesis-driven semantic and contextual similarity tests:
-   - Single-nucleotide transitions vs. transversions
+3. Conducts dynamic hypothesis-driven semantic and contextual similarity tests:
+   - Single-nucleotide transitions vs. transversions across any k (k=3, 4, 6)
    - Reverse complement structural similarities
    - Stride overlap analysis (differentiating sequence overlap from biological context)
 4. Cross-evaluates representations against Parth's classical TF-IDF baseline:
@@ -23,16 +23,14 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from gensim.models import Word2Vec
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 
-# Styling consistent with repository presentation standards
-sns.set_theme(style="whitegrid", palette="deep")
-plt.rcParams.update({"font.sans-serif": "Arial", "font.family": "sans-serif"})
+# Clean styling for presentation-ready figures
+plt.rcParams.update({"font.sans-serif": ["DejaVu Sans", "Arial", "sans-serif"], "font.family": "sans-serif"})
 
 
 def load_data(file_path: str) -> pd.DataFrame:
@@ -65,6 +63,70 @@ def get_reverse_complement(kmer: str) -> str:
     """Returns the reverse complement of a DNA k-mer."""
     complement = {"A": "T", "T": "A", "G": "C", "C": "G"}
     return "".join(complement.get(base, base) for base in reversed(kmer.upper()))
+
+
+def choose_target_kmer(w2v_model, requested_kmer: str = None) -> str:
+    """
+    Selects a target k-mer of the matching length k from the vocabulary.
+    Prioritizes canonical motifs (e.g., 'ATG', 'ATGC', 'ATGCAT').
+    """
+    vocab = list(w2v_model.wv.index_to_key)
+    if not vocab:
+        return ""
+    k = len(vocab[0])
+
+    if requested_kmer and len(requested_kmer) == k and requested_kmer in w2v_model.wv:
+        return requested_kmer
+
+    canonical_motifs = ["ATGCAT", "ATGC", "ATG", "CGCGCG", "CGCC", "CGC"]
+    for motif in canonical_motifs:
+        if len(motif) == k and motif in w2v_model.wv:
+            return motif
+
+    return vocab[0]
+
+
+def generate_dynamic_mutations(target_kmer: str, vocab_set: set) -> dict:
+    """
+    Generates biologically and structurally relevant mutations of matching length k:
+    1. Single-base transition (Purine <-> Purine: A<->G, Pyrimidine <-> Pyrimidine: C<->T)
+    2. Single-base transversion (Purine <-> Pyrimidine: A/G <-> C/T)
+    3. Reverse complement (5' -> 3')
+    4. Stride-1 sliding window shift
+    """
+    k = len(target_kmer)
+    transition_map = {"A": "G", "G": "A", "C": "T", "T": "C"}
+    transversion_map = {"A": "C", "G": "T", "C": "A", "T": "G"}
+
+    mutations = {}
+
+    # 1. Transition at position 0
+    t_base0 = transition_map.get(target_kmer[0], "G")
+    mutations[f"Transition ({target_kmer[0]} -> {t_base0} at pos 0)"] = t_base0 + target_kmer[1:]
+
+    # Transition at end position
+    if k > 1:
+        t_base_end = transition_map.get(target_kmer[-1], "T")
+        mutations[f"Transition ({target_kmer[-1]} -> {t_base_end} at pos {k-1})"] = target_kmer[:-1] + t_base_end
+
+    # 2. Transversion at position 0
+    tv_base0 = transversion_map.get(target_kmer[0], "C")
+    mutations[f"Transversion ({target_kmer[0]} -> {tv_base0} at pos 0)"] = tv_base0 + target_kmer[1:]
+
+    # 3. Reverse Complement
+    mutations["Reverse Complement"] = get_reverse_complement(target_kmer)
+
+    # 4. Shift-1 Stride Overlap (try all bases to find one in vocabulary)
+    prefix = target_kmer[1:]
+    shift_candidate = prefix + "A"
+    for base in ["A", "C", "G", "T"]:
+        test_shift = prefix + base
+        if test_shift in vocab_set:
+            shift_candidate = test_shift
+            break
+    mutations[f"Shift-1 Stride Overlap ('{shift_candidate}')"] = shift_candidate
+
+    return mutations
 
 
 # ----------------------------------------------------------------------
@@ -161,7 +223,7 @@ def compute_tfidf_weighted_vectors(kmer_strings, tokenized_corpus, w2v_model, ve
 # ----------------------------------------------------------------------
 # 3. Contextual & Semantic Similarity Investigation
 # ----------------------------------------------------------------------
-def investigate_semantic_similarities(w2v_model, target_kmer="ATGC"):
+def investigate_semantic_similarities(w2v_model, requested_kmer: str = None):
     """
     Examines biological and structural properties in embedding space:
     1. Most similar neighbors
@@ -173,25 +235,17 @@ def investigate_semantic_similarities(w2v_model, target_kmer="ATGC"):
     print("CONTEXTUAL & SEMANTIC SIMILARITY INVESTIGATION")
     print("=" * 60)
 
-    if target_kmer not in w2v_model.wv:
-        target_kmer = list(w2v_model.wv.index_to_key)[0]
+    target_kmer = choose_target_kmer(w2v_model, requested_kmer)
+    vocab_set = set(w2v_model.wv.index_to_key)
 
-    print(f"Target k-mer: '{target_kmer}' (GC: {calculate_gc_content(target_kmer):.1f}%)")
+    print(f"Target k-mer: '{target_kmer}' (len={len(target_kmer)}, GC: {calculate_gc_content(target_kmer):.1f}%)")
     top_similar = w2v_model.wv.most_similar(target_kmer, topn=5)
     print("\nTop 5 Most Similar k-mers (Cosine Similarity):")
     for word, score in top_similar:
         gc = calculate_gc_content(word)
         print(f"  - {word}: {score:.4f}  (GC: {gc:.1f}%)")
 
-    # Transitions vs Transversions
-    mutations = {
-        "Transition (A -> G at pos 0)": "GTGC",
-        "Transition (C -> T at pos 3)": "ATGT",
-        "Transversion (A -> C at pos 0)": "CTGC",
-        "Transversion (G -> T at pos 2)": "ATTC",
-        "Reverse Complement": get_reverse_complement(target_kmer),
-        "Shift-1 Stride Overlap": target_kmer[1:] + "A",
-    }
+    mutations = generate_dynamic_mutations(target_kmer, vocab_set)
 
     print("\nStructural / Biological Motif Comparisons:")
     for label, candidate in mutations.items():
@@ -408,8 +462,8 @@ def main():
         kmer_strings, tokenized_corpus, w2v_model, vector_dim=args.dim
     )
 
-    # 4. Contextual & Semantic Analysis
-    investigate_semantic_similarities(w2v_model, target_kmer="ATGC")
+    # 4. Contextual & Semantic Analysis (Dynamically matches k)
+    investigate_semantic_similarities(w2v_model)
 
     # 5. Cross-Evaluation Against Classical TF-IDF Baseline (Parth's baseline)
     representations_dict = {
