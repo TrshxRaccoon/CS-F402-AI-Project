@@ -1,6 +1,6 @@
 Configuration,Architecture,Window,Dim,Intra-Class Sim,Inter-Class Sim,Separation Ratio
-"Skip-Gram (w=5, d=64) [Chosen]",Skip-Gram,5,64,0.9832,0.9707,1.0129
-"CBOW (w=5, d=64)",CBOW,5,64,0.998,0.9942,1.0039
-"Skip-Gram Narrow (w=2, d=64)",Skip-Gram,2,64,0.9826,0.9668,1.0163
-"Skip-Gram Wide (w=10, d=64)",Skip-Gram,10,64,0.9846,0.9746,1.0103
-"Skip-Gram LowDim (w=5, d=32)",Skip-Gram,5,32,0.9826,0.9695,1.0135
+"Skip-Gram (w=5, d=64) [Chosen]",Skip-Gram,5,64,0.9831,0.9705,1.013
+"CBOW (w=5, d=64)",CBOW,5,64,0.9979,0.9935,1.0045
+"Skip-Gram Narrow (w=2, d=64)",Skip-Gram,2,64,0.9826,0.967,1.0162
+"Skip-Gram Wide (w=10, d=64)",Skip-Gram,10,64,0.9844,0.9744,1.0102
+"Skip-Gram LowDim (w=5, d=32)",Skip-Gram,5,32,0.9832,0.9706,1.013
